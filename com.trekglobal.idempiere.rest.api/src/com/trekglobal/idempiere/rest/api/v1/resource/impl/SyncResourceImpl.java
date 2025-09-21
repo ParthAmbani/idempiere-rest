@@ -1,7 +1,8 @@
 package com.trekglobal.idempiere.rest.api.v1.resource.impl;
 
 import java.util.List;
-import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
@@ -26,21 +27,39 @@ import com.trekglobal.idempiere.rest.api.json.TypeConverterUtils;
 import com.trekglobal.idempiere.rest.api.v1.resource.SyncResource;
 
 /**
- * SyncResource implementation that accepts a JSON array and creates/updates PO records.
+ * Implementation of SyncResource.
+ * <p>
+ * This resource accepts a JSON array of records and performs create/update
+ * operations on iDempiere POs for a given table.
+ * </p>
+ * <p>
+ * If the record already exists (based on primary key or UUID column), it will
+ * update the record instead of inserting a new one.
+ * </p>
  */
 public class SyncResourceImpl implements SyncResource {
 
-	public static final String PO_BEFORE_REST_SAVE = "idempiere-rest/po/beforeSave";
-	public static final String PO_AFTER_REST_SAVE = "idempiere-rest/po/afterSave";
+    private static final Logger log = Logger.getLogger(SyncResourceImpl.class.getName());
 
+    public static final String PO_BEFORE_REST_SAVE = "idempiere-rest/po/beforeSave";
+    public static final String PO_AFTER_REST_SAVE = "idempiere-rest/po/afterSave";
+
+    /**
+     * Sync endpoint - processes a batch of records for a table.
+     *
+     * @param tableName The name of the iDempiere table
+     * @param jsonText  The JSON array representing records
+     * @return Response with sync result summary
+     */
     @Override
     public Response sync(String tableName, String jsonText) {
         Trx trx = null;
-        int success = 0;
         int failed = 0;
+        int success = 0;
 
         try {
             trx = Trx.get(Trx.createTrxName("SYNC_" + tableName), true);
+            log.info(() -> "Starting sync for table: " + tableName);
 
             // Parse JSON array
             Gson gson = new Gson();
@@ -48,65 +67,85 @@ public class SyncResourceImpl implements SyncResource {
 
             for (JsonObject recordJson : records) {
                 try {
-                    Response resp = create(tableName, recordJson);
-                    if (resp.getStatus() == Status.CREATED.getStatusCode()) {
+                    Response resp = createOrUpdate(tableName, recordJson);
+                    if (resp.getStatus() == Status.CREATED.getStatusCode()
+                            || resp.getStatus() == Status.OK.getStatusCode()) {
                         success++;
                     } else {
                         failed++;
-                        System.err.println("Failed record: " + resp.getEntity());
+                        log.warning(() -> "Failed record: " + resp.getEntity());
                     }
                 } catch (Exception recEx) {
                     failed++;
-                    System.err.println("Exception while syncing record: " + recEx.getMessage());
-                    recEx.printStackTrace(System.err);
+                    log.log(Level.SEVERE, "Exception while syncing record: " + recordJson, recEx);
                 }
             }
 
             trx.commit();
             String result = String.format("{\"status\":\"success\",\"synced\":%d,\"failed\":%d}", success, failed);
+            log.info("Sync completed for " + tableName + ". Success: " + success + ", Failed: " + failed);
             return Response.ok(result).build();
 
         } catch (Exception e) {
-            if (trx != null) trx.rollback();
+            if (trx != null)
+                trx.rollback();
             String message = e.getMessage() == null ? e.toString() : e.getMessage();
+            log.log(Level.SEVERE, "Sync failed for table: " + tableName, e);
             return Response.status(Status.INTERNAL_SERVER_ERROR)
                     .entity("{\"status\":\"error\",\"message\":\"" + message + "\"}")
                     .build();
         } finally {
-            if (trx != null) trx.close();
+            if (trx != null)
+                trx.close();
         }
     }
 
     /**
-     * Create a single record from JSON object
+     * Creates or updates a single record.
+     * <p>
+     * - If a record with the same key column (or UUID column) exists, updates it.
+     * - Otherwise, creates a new record.
+     *
+     * @param tableName  Table name
+     * @param recordJson JSON object representing a single record
+     * @return Response with record result
      */
-    public Response create(String tableName, JsonObject recordJson) {
-        Trx trx = Trx.get(Trx.createTrxName("CREATE_" + tableName), true);
+    public Response createOrUpdate(String tableName, JsonObject recordJson) {
+        Trx trx = Trx.get(Trx.createTrxName("SYNC_CREATE_UPDATE_" + tableName), true);
         try {
-            MTable table = RestUtils.getTableAndCheckAccess(tableName, true);
-
             trx.start();
+            MTable table = RestUtils.getTableAndCheckAccess(tableName, true);
             IPOSerializer serializer = IPOSerializer.getPOSerializer(tableName, MTable.getClass(tableName));
-            PO po = serializer.fromJson(recordJson, table, null);
-			Set<String> jsonFields = recordJson.keySet();
-			if (table.getKeyColumns() != null && table.getKeyColumns().length > 0
-					&& jsonFields.contains(table.getKeyColumns()[0])) {
-				int poID = (int) TypeConverterUtils.fromJsonValue(table.getColumn(table.getKeyColumns()[0]),
-						recordJson.get(table.getKeyColumns()[0]), null);
-				po.set_ValueNoCheck(table.getKeyColumns()[0], poID);
-			}
-			po.setReplication(true);
+
+            // Try to find existing record
+            PO po = findExistingRecord(table, recordJson);
+            boolean isNew = (po == null);
+
+            if (isNew) {
+                // Create new PO if not found
+                po = serializer.fromJson(recordJson, table, null);
+            } else {
+                // Update existing PO
+            	po = serializer.fromJson(recordJson, po, null);
+            }
+
+            po.setReplication(true);
+            po.set_TrxName(trx.getTrxName());
+
+            // Security check
             if (!RestUtils.hasRoleUpdateAccess(po.getAD_Client_ID(), po.getAD_Org_ID(), po.get_Table_ID(), 0, true)) {
+                log.warning(() -> "Role does not have access to update table: " + tableName);
                 return ResponseUtils.getResponseError(Status.FORBIDDEN, "Update error", "Role does not have access", "");
             }
 
-            po.set_TrxName(trx.getTrxName());
-            fireRestSaveEvent(po, PO_BEFORE_REST_SAVE, true);
+            // Fire beforeSave event
+            fireRestSaveEvent(po, PO_BEFORE_REST_SAVE, isNew);
 
             try {
                 po.validForeignKeysEx();
                 po.saveEx();
-                fireRestSaveEvent(po, PO_AFTER_REST_SAVE, true);
+                log.info((isNew ? "Created" : "Updated") + " record in " + tableName + " [ID=" + po.get_ID() + "]");
+                fireRestSaveEvent(po, PO_AFTER_REST_SAVE, isNew);
             } catch (CrossTenantException e) {
                 trx.rollback();
                 return ResponseUtils.getResponseError(Status.INTERNAL_SERVER_ERROR, "Save error",
@@ -120,97 +159,72 @@ public class SyncResourceImpl implements SyncResource {
             po.load(trx.getTrxName());
             JsonObject responseJson = serializer.toJson(po, null);
 
-            return Response.status(Status.CREATED).entity(responseJson.toString()).build();
+            return Response.status(isNew ? Status.CREATED : Status.OK).entity(responseJson.toString()).build();
 
         } catch (Exception ex) {
             trx.rollback();
+            log.log(Level.SEVERE, "Error creating/updating record in table: " + tableName, ex);
             return ResponseUtils.getResponseErrorFromException(ex, "Server error");
         } finally {
             trx.close();
         }
     }
 
-//    private void populatePOFromJson(PO po, Map<String, Object> data) {
-//        for (Map.Entry<String, Object> entry : data.entrySet()) {
-//            String columnName = entry.getKey();
-//            Object value = entry.getValue();
-//
-//            if (po.get_ColumnIndex(columnName) >= 0 && value != null) {
-//                if (value instanceof String) {
-//                    String s = (String) value;
-//                    try {
-//                        Timestamp ts = Timestamp.valueOf(s); // yyyy-MM-dd HH:mm:ss
-//                        po.set_ValueNoCheck(columnName, ts);
-//                        continue;
-//                    } catch (IllegalArgumentException | DateTimeParseException ignore) {
-//                        try {
-//                            Timestamp tsIso = Timestamp.from(java.time.Instant.parse(s));
-//                            po.set_ValueNoCheck(columnName, tsIso);
-//                            continue;
-//                        } catch (Exception ignore2) { }
-//                    }
-//                }
-//                po.set_ValueNoCheck(columnName, value);
-//            }
-//        }
-//
-//        if (po.get_ColumnIndex("AD_Client_ID") >= 0) {
-//            Object clientVal = po.get_Value("AD_Client_ID");
-//            if (clientVal == null || (clientVal instanceof Number && ((Number) clientVal).intValue() == 0)) {
-//                po.set_ValueNoCheck("AD_Client_ID", Env.getAD_Client_ID(Env.getCtx()));
-//            }
-//        }
-//
-//        if (po.get_ColumnIndex("Created") >= 0 && po.get_Value("Created") == null) {
-//            po.set_ValueNoCheck("Created", new Timestamp(System.currentTimeMillis()));
-//        }
-//    }
-//
-//    private void copyValuesToExisting(PO source, PO existing) {
-//        for (int i = 0; i < source.get_ColumnCount(); i++) {
-//            String col = source.get_ColumnName(i);
-//            Object val = source.get_Value(col);
-//            if (val != null) {
-//                existing.set_ValueNoCheck(col, val);
-//            }
-//        }
-//    }
-
-//    private PO findExistingRecord(MTable table, Map<String, Object> recordData, String trxName) {
-//        String idColumn = table.getTableName() + "_ID";
-//        Object idObj = recordData.get(idColumn);
-//        if (idObj instanceof Number) {
-//            int id = ((Number) idObj).intValue();
-//            if (id > 0) {
-//                return table.getPO(id, trxName);
-//            }
-//        }
-//
-//        if (table.getColumnIndex("UUID") >= 0) {
-//            Object uuidObj = recordData.get("UUID");
-//            if (uuidObj instanceof String && !((String) uuidObj).trim().isEmpty()) {
-//                String uuid = ((String) uuidObj).trim();
-//                return new Query(Env.getCtx(), table.getTableName(), "UUID = ?", trxName)
-//                        .setParameters(uuid)
-//                        .first();
-//            }
-//        }
-//
-//        return null;
-//    }
-    
     /**
-	 * Fire the PO_BEFORE_REST_SAVE/PO_AFTER_REST_SAVE event, to catch and manipulate the object before the model beforeSave/afterSave
-	 * @param po
-	 */
-	private void fireRestSaveEvent(PO po, String topic, boolean isNew) {
-		Event event = EventManager.newEvent(topic,
-				new EventProperty(EventManager.EVENT_DATA, po), new EventProperty("tableName", po.get_TableName()),
-				new EventProperty("isNew", isNew));
-		EventManager.getInstance().sendEvent(event);
-		@SuppressWarnings("unchecked")
-		List<String> errors = (List<String>) event.getProperty(IEventManager.EVENT_ERROR_MESSAGES);
-		if (errors != null && !errors.isEmpty())
-			throw new AdempiereException(errors.get(0));
-	}
+     * Attempts to find an existing PO record based on primary key or UUID.
+     *
+     * @param table      Table reference
+     * @param recordJson Input JSON record
+     * @return Existing PO if found, otherwise null
+     */
+    private PO findExistingRecord(MTable table, JsonObject recordJson) {
+        try {
+            String[] keyColumns = table.getKeyColumns();
+            if (keyColumns != null && keyColumns.length > 0 && recordJson.has(keyColumns[0])) {
+                int poID = (int) TypeConverterUtils.fromJsonValue(table.getColumn(keyColumns[0]),
+                        recordJson.get(keyColumns[0]), null);
+                if (poID > 0) {
+                    PO existingPO = table.getPO(poID, null);
+                    if (existingPO != null && existingPO.get_ID() > 0) {
+                        log.fine(() -> "Found existing PO by ID: " + poID);
+                        return existingPO;
+                    }
+                }
+            }
+
+            String uuidColumn = table.getUUIDColumnName();
+            if (uuidColumn != null && recordJson.has(uuidColumn)) {
+                String uuidValue = recordJson.get(uuidColumn).getAsString();
+                PO existingPO = table.getPO(uuidColumn + "=?", new Object[] { uuidValue }, null);
+                if (existingPO != null && existingPO.get_ID() > 0) {
+                    log.fine(() -> "Found existing PO by UUID: " + uuidValue);
+                    return existingPO;
+                }
+            }
+        } catch (Exception e) {
+            log.log(Level.WARNING, "Error while checking for existing record in " + table.getTableName(), e);
+        }
+        return null;
+    }
+
+    /**
+     * Fires the PO_BEFORE_REST_SAVE/PO_AFTER_REST_SAVE event.
+     *
+     * @param po    The PO object being saved
+     * @param topic Event topic
+     * @param isNew Whether this is a new record
+     */
+    private void fireRestSaveEvent(PO po, String topic, boolean isNew) {
+        Event event = EventManager.newEvent(topic,
+                new EventProperty(EventManager.EVENT_DATA, po),
+                new EventProperty("tableName", po.get_TableName()),
+                new EventProperty("isNew", isNew));
+        EventManager.getInstance().sendEvent(event);
+
+        @SuppressWarnings("unchecked")
+        List<String> errors = (List<String>) event.getProperty(IEventManager.EVENT_ERROR_MESSAGES);
+        if (errors != null && !errors.isEmpty()) {
+            throw new AdempiereException(errors.get(0));
+        }
+    }
 }
