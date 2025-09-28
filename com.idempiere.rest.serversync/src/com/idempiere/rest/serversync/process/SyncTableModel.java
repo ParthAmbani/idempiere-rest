@@ -22,6 +22,7 @@ import com.idempiere.rest.serversync.dto.AuthRequest;
 import com.idempiere.rest.serversync.dto.AuthResponse;
 import com.idempiere.rest.serversync.dto.RefreshTokenRequest;
 import com.idempiere.rest.serversync.dto.RefreshTokenResponse;
+import com.idempiere.rest.serversync.dto.SyncLogger;
 import com.idempiere.rest.serversync.model.MSSServerConfig;
 import com.idempiere.rest.serversync.model.MSSServerLogin;
 import com.idempiere.rest.serversync.model.MSSSyncConfig;
@@ -252,6 +253,7 @@ public class SyncTableModel extends SvrProcess {
 				try {
 					String response = client.post(endpoint, payloadCreate.toString());
 					log.info("Create sync successful for " + tableName + ". Response: " + response);
+					SyncLogger.logSyncResponse(response, synTable, getCtx(), get_TrxName());
 				} catch (Exception ex) {
 					log.log(Level.SEVERE, "Create sync failed for table " + tableName, ex);
 				}
@@ -274,7 +276,9 @@ public class SyncTableModel extends SvrProcess {
 						String columnName = po.get_ColumnName(i);
 						if (MTable.get(getCtx(), tableName).getColumn(columnName).isVirtualColumn()
 								|| MTable.get(getCtx(), tableName).getColumn(columnName)
-										.getAD_Reference_ID() == DisplayType.Button)
+										.getAD_Reference_ID() == DisplayType.Button
+										|| (columnName.equalsIgnoreCase("IsActive") 
+												&& po.get_ValueAsBoolean(columnName) && po.get_ValueAsBoolean("Processed")))
 							continue;
 						if (MTable.get(getCtx(), tableName).getColumn(columnName).isUpdateable()) {
 							Object value = po.get_Value(i);
@@ -296,6 +300,7 @@ public class SyncTableModel extends SvrProcess {
 				try {
 					String response = client.post(endpoint, payloadUpdate.toString());
 					log.info("Update sync successful for " + tableName + ". Response: " + response);
+					SyncLogger.logSyncResponse(response, synTable, getCtx(), get_TrxName());
 				} catch (Exception ex) {
 					log.log(Level.SEVERE, "Update sync failed for table " + tableName, ex);
 				}
