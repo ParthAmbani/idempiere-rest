@@ -32,7 +32,7 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
 	/**
 	 *
 	 */
-	private static final long serialVersionUID = 20250921L;
+	private static final long serialVersionUID = 20260214L;
 
     /** Standard Constructor */
     public X_SS_SyncTable (Properties ctx, int SS_SyncTable_ID, String trxName)
@@ -40,6 +40,8 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
       super (ctx, SS_SyncTable_ID, trxName);
       /** if (SS_SyncTable_ID == 0)
         {
+			setIsMasterTable (false);
+// N
 			setSS_SyncTable_ID (0);
         } */
     }
@@ -50,6 +52,8 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
       super (ctx, SS_SyncTable_ID, trxName, virtualColumns);
       /** if (SS_SyncTable_ID == 0)
         {
+			setIsMasterTable (false);
+// N
 			setSS_SyncTable_ID (0);
         } */
     }
@@ -60,6 +64,8 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
       super (ctx, SS_SyncTable_UU, trxName);
       /** if (SS_SyncTable_UU == null)
         {
+			setIsMasterTable (false);
+// N
 			setSS_SyncTable_ID (0);
         } */
     }
@@ -70,6 +76,8 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
       super (ctx, SS_SyncTable_UU, trxName, virtualColumns);
       /** if (SS_SyncTable_UU == null)
         {
+			setIsMasterTable (false);
+// N
 			setSS_SyncTable_ID (0);
         } */
     }
@@ -125,6 +133,47 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
 	public int getAD_Table_ID()
 	{
 		Integer ii = (Integer)get_Value(COLUMNNAME_AD_Table_ID);
+		if (ii == null)
+			 return 0;
+		return ii.intValue();
+	}
+
+	/** Set Master Table.
+		@param IsMasterTable Master Table
+	*/
+	public void setIsMasterTable (boolean IsMasterTable)
+	{
+		set_ValueNoCheck (COLUMNNAME_IsMasterTable, Boolean.valueOf(IsMasterTable));
+	}
+
+	/** Get Master Table.
+		@return Master Table	  */
+	public boolean isMasterTable()
+	{
+		Object oo = get_Value(COLUMNNAME_IsMasterTable);
+		if (oo != null)
+		{
+			 if (oo instanceof Boolean)
+				 return ((Boolean)oo).booleanValue();
+			return "Y".equals(oo);
+		}
+		return false;
+	}
+
+	/** Set Line No.
+		@param Line Unique line for this document
+	*/
+	public void setLine (int Line)
+	{
+		set_ValueNoCheck (COLUMNNAME_Line, Integer.valueOf(Line));
+	}
+
+	/** Get Line No.
+		@return Unique line for this document
+	  */
+	public int getLine()
+	{
+		Integer ii = (Integer)get_Value(COLUMNNAME_Line);
 		if (ii == null)
 			 return 0;
 		return ii.intValue();

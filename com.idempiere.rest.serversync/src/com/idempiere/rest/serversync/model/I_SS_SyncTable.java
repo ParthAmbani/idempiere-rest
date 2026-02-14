@@ -108,6 +108,28 @@ public interface I_SS_SyncTable
 	  */
 	public boolean isActive();
 
+    /** Column name IsMasterTable */
+    public static final String COLUMNNAME_IsMasterTable = "IsMasterTable";
+
+	/** Set Master Table	  */
+	public void setIsMasterTable (boolean IsMasterTable);
+
+	/** Get Master Table	  */
+	public boolean isMasterTable();
+
+    /** Column name Line */
+    public static final String COLUMNNAME_Line = "Line";
+
+	/** Set Line No.
+	  * Unique line for this document
+	  */
+	public void setLine (int Line);
+
+	/** Get Line No.
+	  * Unique line for this document
+	  */
+	public int getLine();
+
     /** Column name SS_SyncConfig_ID */
     public static final String COLUMNNAME_SS_SyncConfig_ID = "SS_SyncConfig_ID";
 

@@ -35,7 +35,7 @@ public class MSSSyncConfig extends X_SS_SyncConfig {
 
 	public List<MSSSyncTable> getsyncTable() {
 		return new Query(getCtx(), MSSSyncTable.Table_Name, MSSSyncTable.COLUMNNAME_SS_SyncConfig_ID + " = ? ",
-				get_TrxName()).setOnlyActiveRecords(true).setParameters(getSS_SyncConfig_ID()).list();
+				get_TrxName()).setOnlyActiveRecords(true).setOrderBy(MSSSyncTable.COLUMNNAME_Line + ", " + MSSSyncTable.COLUMNNAME_IsMasterTable + " DESC ").setParameters(getSS_SyncConfig_ID()).list();
 	}
 
 }
