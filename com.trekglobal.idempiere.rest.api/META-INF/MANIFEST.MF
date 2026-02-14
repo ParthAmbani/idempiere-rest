@@ -1,7 +1,7 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: REST API
-Bundle-SymbolicName: com.trekglobal.idempiere.rest.api
+Bundle-SymbolicName: com.trekglobal.idempiere.rest.api;singleton:=true
 Bundle-Version: 0.1.0.qualifier
 Bundle-Activator: com.trekglobal.idempiere.rest.api.Activator
 Bundle-RequiredExecutionEnvironment: JavaSE-17
