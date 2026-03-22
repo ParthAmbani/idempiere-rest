@@ -32,7 +32,7 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
 	/**
 	 *
 	 */
-	private static final long serialVersionUID = 20260214L;
+	private static final long serialVersionUID = 20260322L;
 
     /** Standard Constructor */
     public X_SS_SyncTable (Properties ctx, int SS_SyncTable_ID, String trxName)
@@ -143,7 +143,7 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
 	*/
 	public void setIsMasterTable (boolean IsMasterTable)
 	{
-		set_ValueNoCheck (COLUMNNAME_IsMasterTable, Boolean.valueOf(IsMasterTable));
+		set_Value (COLUMNNAME_IsMasterTable, Boolean.valueOf(IsMasterTable));
 	}
 
 	/** Get Master Table.
@@ -160,12 +160,28 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
 		return false;
 	}
 
+	/** Set Sql JOIN.
+		@param JoinClause Fully qualified SQL JOIN clause
+	*/
+	public void setJoinClause (String JoinClause)
+	{
+		set_Value (COLUMNNAME_JoinClause, JoinClause);
+	}
+
+	/** Get Sql JOIN.
+		@return Fully qualified SQL JOIN clause
+	  */
+	public String getJoinClause()
+	{
+		return (String)get_Value(COLUMNNAME_JoinClause);
+	}
+
 	/** Set Line No.
 		@param Line Unique line for this document
 	*/
 	public void setLine (int Line)
 	{
-		set_ValueNoCheck (COLUMNNAME_Line, Integer.valueOf(Line));
+		set_Value (COLUMNNAME_Line, Integer.valueOf(Line));
 	}
 
 	/** Get Line No.
@@ -240,6 +256,22 @@ public class X_SS_SyncTable extends PO implements I_SS_SyncTable, I_Persistent
 	public String getSS_SyncTable_UU()
 	{
 		return (String)get_Value(COLUMNNAME_SS_SyncTable_UU);
+	}
+
+	/** Set Sql WHERE.
+		@param WhereClause Fully qualified SQL WHERE clause
+	*/
+	public void setWhereClause (String WhereClause)
+	{
+		set_Value (COLUMNNAME_WhereClause, WhereClause);
+	}
+
+	/** Get Sql WHERE.
+		@return Fully qualified SQL WHERE clause
+	  */
+	public String getWhereClause()
+	{
+		return (String)get_Value(COLUMNNAME_WhereClause);
 	}
 
 	/** Set sync Date.

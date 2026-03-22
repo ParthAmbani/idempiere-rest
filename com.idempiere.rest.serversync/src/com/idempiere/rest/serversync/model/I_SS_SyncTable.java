@@ -117,6 +117,19 @@ public interface I_SS_SyncTable
 	/** Get Master Table	  */
 	public boolean isMasterTable();
 
+    /** Column name JoinClause */
+    public static final String COLUMNNAME_JoinClause = "JoinClause";
+
+	/** Set Sql JOIN.
+	  * Fully qualified SQL JOIN clause
+	  */
+	public void setJoinClause (String JoinClause);
+
+	/** Get Sql JOIN.
+	  * Fully qualified SQL JOIN clause
+	  */
+	public String getJoinClause();
+
     /** Column name Line */
     public static final String COLUMNNAME_Line = "Line";
 
@@ -174,6 +187,19 @@ public interface I_SS_SyncTable
 	  * User who updated this records
 	  */
 	public int getUpdatedBy();
+
+    /** Column name WhereClause */
+    public static final String COLUMNNAME_WhereClause = "WhereClause";
+
+	/** Set Sql WHERE.
+	  * Fully qualified SQL WHERE clause
+	  */
+	public void setWhereClause (String WhereClause);
+
+	/** Get Sql WHERE.
+	  * Fully qualified SQL WHERE clause
+	  */
+	public String getWhereClause();
 
     /** Column name syncDate */
     public static final String COLUMNNAME_syncDate = "syncDate";

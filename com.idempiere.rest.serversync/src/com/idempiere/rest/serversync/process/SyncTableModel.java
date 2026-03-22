@@ -173,6 +173,14 @@ public class SyncTableModel extends SvrProcess {
 		log.info("✅ New token obtained and saved. Valid until: " + newTokenExpiry);
 		return token;
 	}
+	
+	// Helper to merge where clauses
+	String buildWhere(String baseWhere, String whereClause) {
+		if (!Util.isEmpty(whereClause, true)) { // true = trim check
+			return baseWhere + " AND (" + whereClause + ")";
+		}
+		return baseWhere;
+	}
 
 	/**
 	 * Fetch PO records and sync them to remote iDempiere server. Handles create
@@ -191,33 +199,58 @@ public class SyncTableModel extends SvrProcess {
 
 		List<PO> createdRecords;
 		List<PO> updatedRecords;
+		
+		String whereClause = synTable.getWhereClause();
+		String joinClause = synTable.getJoinClause();
 
-		// === FIRST SYNC: send all records as create ===
+		// === FIRST SYNC ===
 		if (syncDate == null) {
-			String whereClause = "AD_Client_ID = ?";
-			Object[] params = new Object[] { serverLogin.getSS_Client_ID() };
-			createdRecords = new Query(getCtx(), tableName, whereClause, get_TrxName()).setParameters(params)
-					.setOnlyActiveRecords(true).list();
-			updatedRecords = null; // no updates yet
-			log.info("First sync detected. Sending " + createdRecords.size() + " records as create.");
+
+			String whereClauseAll = buildWhere(tableName + ".AD_Client_ID = ?", whereClause);
+		    Query query = new Query(getCtx(), tableName, whereClauseAll, get_TrxName())
+		            .setParameters(new Object[]{ serverLogin.getSS_Client_ID() })
+		            .setOnlyActiveRecords(true);
+
+		    if (!Util.isEmpty(joinClause, true)) {
+		        query.addJoinClause(joinClause);
+		    }
+
+		    createdRecords = query.list();
+		    updatedRecords = null;
+
+		    log.info("First sync detected. Sending " + createdRecords.size() + " records as create.");
+
 		} else {
-			// === Subsequent sync: split created vs updated ===
-			// Created
-			String whereCreated = "AD_Client_ID = ? AND Created >= ?";
-			Object[] paramsCreated = new Object[] { serverLogin.getSS_Client_ID(), syncDate };
-			createdRecords = new Query(getCtx(), tableName, whereCreated, get_TrxName()).setParameters(paramsCreated)
-					.setOnlyActiveRecords(true).list();
 
-			// Updated
-			String whereUpdated = "AD_Client_ID = ? AND Updated >= ? AND Created < ?";
-			Object[] paramsUpdated = new Object[] { serverLogin.getSS_Client_ID(), syncDate, syncDate };
-			updatedRecords = new Query(getCtx(), tableName, whereUpdated, get_TrxName()).setParameters(paramsUpdated)
-					.setOnlyActiveRecords(true).list();
+		    // === Created ===
+			String whereCreated = buildWhere(tableName + ".AD_Client_ID = ? AND " + tableName + ".Created >= ?",
+					whereClause);
+		    Query createdQuery = new Query(getCtx(), tableName, whereCreated, get_TrxName())
+		            .setParameters(new Object[]{ serverLogin.getSS_Client_ID(), syncDate })
+		            .setOnlyActiveRecords(true);
 
-			log.info("Found " + createdRecords.size() + " new records and " + updatedRecords.size()
-					+ " updated records for table: " + tableName);
+		    if (!Util.isEmpty(joinClause, true)) {
+		        createdQuery.addJoinClause(joinClause);
+		    }
+
+		    createdRecords = createdQuery.list();
+
+		    // === Updated ===
+			String whereUpdated = buildWhere(tableName + ".AD_Client_ID = ? AND " + tableName + ".Updated >= ? AND "
+					+ tableName + ".Created < ?", whereClause);
+		    Query updatedQuery = new Query(getCtx(), tableName, whereUpdated, get_TrxName())
+		            .setParameters(new Object[]{ serverLogin.getSS_Client_ID(), syncDate, syncDate })
+		            .setOnlyActiveRecords(true);
+
+		    if (!Util.isEmpty(joinClause, true)) {
+		        updatedQuery.addJoinClause(joinClause);
+		    }
+
+		    updatedRecords = updatedQuery.list();
+
+		    log.info("Found " + createdRecords.size() + " new records and "
+		            + updatedRecords.size() + " updated records for table: " + tableName);
 		}
-
 		IPOSerializer serializer = IPOSerializer.getPOSerializer(tableName, MTable.getClass(tableName));
 		IdempiereRestClient client = new IdempiereRestClient(token);
 
