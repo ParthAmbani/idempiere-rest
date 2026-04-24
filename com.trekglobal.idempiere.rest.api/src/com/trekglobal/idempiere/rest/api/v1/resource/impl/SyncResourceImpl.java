@@ -118,13 +118,14 @@ public class SyncResourceImpl implements SyncResource {
 	 */
 	public SyncResult createOrUpdate(String tableName, JsonObject recordJson) {
 		Trx trx = Trx.get(Trx.createTrxName("SYNC_CREATE_UPDATE_" + tableName), true);
+		PO po = null;
 		try {
 			trx.start();
 			MTable table = RestUtils.getTableAndCheckAccess(tableName, true);
 			IPOSerializer serializer = IPOSerializer.getPOSerializer(tableName, MTable.getClass(tableName));
 
 			// Try to find existing record
-			PO po = findExistingRecord(table, recordJson);
+			po = findExistingRecord(table, recordJson);
 			boolean isNew = (po == null);
 
 			if (isNew) {
@@ -164,7 +165,7 @@ public class SyncResourceImpl implements SyncResource {
 		} catch (Exception ex) {
 			trx.rollback();
 			log.log(Level.SEVERE, "Error creating/updating record in table: " + tableName, ex);
-			return new SyncResult(false, "Server error: " + ex.getMessage(), "unknown",
+			return new SyncResult(false, "Server error: " + ex.getMessage() + (po == null ? " ": " ( " + po.get_ID() + " ) ") , "unknown",
 					extractIdentifier(null, recordJson)); // fallback if table is null
 		} finally {
 			trx.close();

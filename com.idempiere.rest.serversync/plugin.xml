@@ -8,5 +8,21 @@
             class="com.idempiere.rest.serversync.process.SyncTableModel">
       </process>
    </extension>
+   <extension
+         id="com.idempiere.rest.serversync.process.ReSyncAllTable"
+         name="com.idempiere.rest.serversync.process.ReSyncAllTable"
+         point="org.adempiere.base.Process">
+      <process
+            class="com.idempiere.rest.serversync.process.ReSyncAllTable">
+      </process>
+   </extension>
+   <extension
+         id="com.idempiere.rest.serversync.process.ReSyncTable"
+         name="com.idempiere.rest.serversync.process.ReSyncTable"
+         point="org.adempiere.base.Process">
+      <process
+            class="com.idempiere.rest.serversync.process.ReSyncTable">
+      </process>
+   </extension>
 
 </plugin>

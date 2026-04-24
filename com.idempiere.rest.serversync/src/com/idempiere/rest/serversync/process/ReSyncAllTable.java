@@ -1,16 +1,13 @@
 package com.idempiere.rest.serversync.process;
 
-import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.compiere.model.MProcessPara;
 import org.compiere.model.MTable;
 import org.compiere.model.PO;
 import org.compiere.model.Query;
-import org.compiere.process.ProcessInfoParameter;
 import org.compiere.process.SvrProcess;
 import org.compiere.util.DisplayType;
 import org.compiere.util.Util;
@@ -32,19 +29,7 @@ import com.idempiere.rest.serversync.service.IdempiereAuthService;
 import com.idempiere.rest.serversync.service.IdempiereRestClient;
 import com.trekglobal.idempiere.rest.api.json.IPOSerializer;
 
-/**
- * SyncModelProcess ---------------- This process fetches PO records from the
- * local iDempiere instance and synchronizes them to a remote iDempiere server
- * via REST API.
- *
- * Steps: 1. Authenticate to the remote server using token/refresh logic. 2.
- * Fetch records from configured tables, filtered by last sync date. 3.
- * Serialize records to JSON. 4. POST records to remote endpoint. 5. Update sync
- * timestamp for successfully synced tables.
- * 
- * Author: Parth Ambani
- */
-public class SyncTableModel extends SvrProcess {
+public class ReSyncAllTable extends SvrProcess {
 
 	private static final Logger log = Logger.getLogger(SyncTableModel.class.getName());
 
@@ -56,19 +41,7 @@ public class SyncTableModel extends SvrProcess {
 	 */
 	@Override
 	protected void prepare() {
-		ProcessInfoParameter[] para = getParameter();
-		for (ProcessInfoParameter p : para) {
-			String name = p.getParameterName();
-			if (p.getParameter() == null)
-				continue;
-
-			if (MSSSyncConfig.COLUMNNAME_SS_SyncConfig_ID.equals(name)) {
-				p_SyncConfig_ID = ((BigDecimal) p.getParameter()).intValue();
-			} else {
-				MProcessPara.validateUnknownParameter(getProcessInfo().getAD_Process_ID(), p);
-			}
-		}
-		log.info("SyncModelProcess prepared with SyncConfig_ID=" + p_SyncConfig_ID);
+		p_SyncConfig_ID = getRecord_ID();
 	}
 
 	/**
@@ -93,7 +66,7 @@ public class SyncTableModel extends SvrProcess {
 			List<MSSSyncTable> tables = syncConfig.getsyncTable();
 			for (MSSSyncTable table : tables) {
 				try {
-					syncRecords(table, token, config, serverLogin, false);
+					syncRecords(table, token, config, serverLogin, true);
 				} catch (Exception e) {
 					log.log(Level.SEVERE, "Error syncing table: " + table.getAD_Table().getTableName(), e);
 				}
@@ -174,7 +147,7 @@ public class SyncTableModel extends SvrProcess {
 		log.info("✅ New token obtained and saved. Valid until: " + newTokenExpiry);
 		return token;
 	}
-	
+
 	// Helper to merge where clauses
 	String buildWhere(String baseWhere, String whereClause) {
 		if (!Util.isEmpty(whereClause, true)) { // true = trim check
@@ -192,15 +165,16 @@ public class SyncTableModel extends SvrProcess {
 	 * @param config      iDempiere REST config
 	 * @param serverLogin Server login info
 	 */
-	private void syncRecords(MSSSyncTable synTable, String token, IdempiereConfig config, MSSServerLogin serverLogin, boolean isReSyncTable)
-			throws Exception {
+	// TODO make this Util method
+	private void syncRecords(MSSSyncTable synTable, String token, IdempiereConfig config, MSSServerLogin serverLogin,
+			boolean isReSyncTable) throws Exception {
 
 		String tableName = synTable.getAD_Table().getTableName();
 		Timestamp syncDate = isReSyncTable ? null : synTable.getsyncDate();
 
 		List<PO> createdRecords;
 		List<PO> updatedRecords;
-		
+
 		String whereClause = synTable.getWhereClause();
 		String joinClause = synTable.getJoinClause();
 
@@ -208,49 +182,47 @@ public class SyncTableModel extends SvrProcess {
 		if (syncDate == null) {
 
 			String whereClauseAll = buildWhere(tableName + ".AD_Client_ID = ?", whereClause);
-		    Query query = new Query(getCtx(), tableName, whereClauseAll, get_TrxName())
-		            .setParameters(new Object[]{ serverLogin.getSS_Client_ID() })
-		            .setOnlyActiveRecords(true);
+			Query query = new Query(getCtx(), tableName, whereClauseAll, get_TrxName())
+					.setParameters(new Object[] { serverLogin.getSS_Client_ID() }).setOnlyActiveRecords(true);
 
-		    if (!Util.isEmpty(joinClause, true)) {
-		        query.addJoinClause(joinClause);
-		    }
+			if (!Util.isEmpty(joinClause, true)) {
+				query.addJoinClause(joinClause);
+			}
 
-		    createdRecords = query.list();
-		    updatedRecords = null;
+			createdRecords = query.list();
+			updatedRecords = null;
 
-		    log.info("First sync detected. Sending " + createdRecords.size() + " records as create.");
+			log.info("First sync detected. Sending " + createdRecords.size() + " records as create.");
 
 		} else {
 
-		    // === Created ===
+			// === Created ===
 			String whereCreated = buildWhere(tableName + ".AD_Client_ID = ? AND " + tableName + ".Created >= ?",
 					whereClause);
-		    Query createdQuery = new Query(getCtx(), tableName, whereCreated, get_TrxName())
-		            .setParameters(new Object[]{ serverLogin.getSS_Client_ID(), syncDate })
-		            .setOnlyActiveRecords(true);
+			Query createdQuery = new Query(getCtx(), tableName, whereCreated, get_TrxName())
+					.setParameters(new Object[] { serverLogin.getSS_Client_ID(), syncDate }).setOnlyActiveRecords(true);
 
-		    if (!Util.isEmpty(joinClause, true)) {
-		        createdQuery.addJoinClause(joinClause);
-		    }
+			if (!Util.isEmpty(joinClause, true)) {
+				createdQuery.addJoinClause(joinClause);
+			}
 
-		    createdRecords = createdQuery.list();
+			createdRecords = createdQuery.list();
 
-		    // === Updated ===
+			// === Updated ===
 			String whereUpdated = buildWhere(tableName + ".AD_Client_ID = ? AND " + tableName + ".Updated >= ? AND "
 					+ tableName + ".Created < ?", whereClause);
-		    Query updatedQuery = new Query(getCtx(), tableName, whereUpdated, get_TrxName())
-		            .setParameters(new Object[]{ serverLogin.getSS_Client_ID(), syncDate, syncDate })
-		            .setOnlyActiveRecords(true);
+			Query updatedQuery = new Query(getCtx(), tableName, whereUpdated, get_TrxName())
+					.setParameters(new Object[] { serverLogin.getSS_Client_ID(), syncDate, syncDate })
+					.setOnlyActiveRecords(true);
 
-		    if (!Util.isEmpty(joinClause, true)) {
-		        updatedQuery.addJoinClause(joinClause);
-		    }
+			if (!Util.isEmpty(joinClause, true)) {
+				updatedQuery.addJoinClause(joinClause);
+			}
 
-		    updatedRecords = updatedQuery.list();
+			updatedRecords = updatedQuery.list();
 
-		    log.info("Found " + createdRecords.size() + " new records and "
-		            + updatedRecords.size() + " updated records for table: " + tableName);
+			log.info("Found " + createdRecords.size() + " new records and " + updatedRecords.size()
+					+ " updated records for table: " + tableName);
 		}
 		IPOSerializer serializer = IPOSerializer.getPOSerializer(tableName, MTable.getClass(tableName));
 		IdempiereRestClient client = new IdempiereRestClient(token);
@@ -314,8 +286,8 @@ public class SyncTableModel extends SvrProcess {
 						if (MTable.get(getCtx(), tableName).getColumn(columnName).isVirtualColumn()
 								|| MTable.get(getCtx(), tableName).getColumn(columnName)
 										.getAD_Reference_ID() == DisplayType.Button
-										|| (columnName.equalsIgnoreCase("IsActive") 
-												&& po.get_ValueAsBoolean(columnName) && po.get_ValueAsBoolean("Processed")))
+								|| (columnName.equalsIgnoreCase("IsActive") && po.get_ValueAsBoolean(columnName)
+										&& po.get_ValueAsBoolean("Processed")))
 							continue;
 						if (MTable.get(getCtx(), tableName).getColumn(columnName).isUpdateable()) {
 							Object value = po.get_Value(i);

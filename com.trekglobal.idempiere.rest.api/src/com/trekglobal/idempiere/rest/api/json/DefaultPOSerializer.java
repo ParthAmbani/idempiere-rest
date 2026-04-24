@@ -462,6 +462,12 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 					}
 				}
 			}
+			if (!column.isUpdateable()) {
+				if (errorOnNonUpdatable)
+					throw new AdempiereException("Cannot update " + column.getColumnName() + " on posted record");
+				else
+					return false;
+			}
 		}
 		return true;
 	}
