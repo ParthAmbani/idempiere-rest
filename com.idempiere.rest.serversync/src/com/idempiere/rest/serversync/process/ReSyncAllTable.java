@@ -15,15 +15,10 @@ import org.compiere.util.Util;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.idempiere.rest.serversync.config.IdempiereConfig;
-import com.idempiere.rest.serversync.dto.AuthRequest;
-import com.idempiere.rest.serversync.dto.AuthResponse;
-import com.idempiere.rest.serversync.dto.RefreshTokenRequest;
-import com.idempiere.rest.serversync.dto.RefreshTokenResponse;
 import com.idempiere.rest.serversync.dto.SyncLogger;
 import com.idempiere.rest.serversync.model.MSSServerConfig;
 import com.idempiere.rest.serversync.model.MSSServerLogin;
 import com.idempiere.rest.serversync.model.MSSSyncConfig;
-import com.idempiere.rest.serversync.model.MSSSyncLogSummary;
 import com.idempiere.rest.serversync.model.MSSSyncTable;
 import com.idempiere.rest.serversync.service.IdempiereAuthService;
 import com.idempiere.rest.serversync.service.IdempiereRestClient;
@@ -60,7 +55,7 @@ public class ReSyncAllTable extends SvrProcess {
 			IdempiereAuthService authService = new IdempiereAuthService(config);
 
 			// ✅ Step 1: Obtain valid token (login or refresh if needed)
-			String token = refreshOrLoginToken(syncConfig, serverLogin, authService);
+			String token = SyncUtils.refreshOrLoginToken(syncConfig, serverLogin, authService, null);
 
 			// ✅ Step 2: Loop through tables to sync
 			List<MSSSyncTable> tables = syncConfig.getsyncTable();
@@ -79,73 +74,6 @@ public class ReSyncAllTable extends SvrProcess {
 			log.log(Level.SEVERE, "❌ SyncModelProcess failed: " + e.getMessage(), e);
 			throw e;
 		}
-	}
-
-	/**
-	 * Refreshes or logs in to obtain a valid token for REST API. Handles
-	 * token/refresh expiration logic and updates MSSSyncConfig accordingly.
-	 */
-	private String refreshOrLoginToken(MSSSyncConfig syncConfig, MSSServerLogin serverLogin,
-			IdempiereAuthService authService) throws Exception {
-
-		String token = syncConfig.getToken();
-		String refreshToken = syncConfig.getRefreshToken();
-		Timestamp tokenExpiry = syncConfig.getTokenExpiry();
-		Timestamp refreshExpiry = syncConfig.getRefreshTokenExpiry();
-		Timestamp now = new Timestamp(System.currentTimeMillis());
-
-		// Use existing token if valid
-		if (token != null && tokenExpiry != null && now.before(tokenExpiry)) {
-			log.info("✅ Using existing token (valid until " + tokenExpiry + ")");
-			return token;
-		}
-
-		// Refresh token if possible
-		if (refreshToken != null && refreshExpiry != null && now.before(refreshExpiry)) {
-			log.info("🔄 Refreshing token (refresh token valid until " + refreshExpiry + ")");
-			RefreshTokenRequest refreshRequest = new RefreshTokenRequest(refreshToken, serverLogin.getSS_Client_ID(),
-					syncConfig.getUserID());
-			RefreshTokenResponse refreshResponse = authService.refreshToken(refreshRequest);
-
-			token = refreshResponse.getToken();
-			refreshToken = refreshResponse.getRefresh_token();
-
-			Timestamp newTokenExpiry = new Timestamp(now.getTime() + 60 * 60 * 1000); // 1 hour
-			Timestamp newRefreshExpiry = new Timestamp(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
-
-			syncConfig.setToken(token);
-			syncConfig.setRefreshToken(refreshToken);
-			syncConfig.setTokenExpiry(newTokenExpiry);
-			syncConfig.setRefreshTokenExpiry(newRefreshExpiry);
-			syncConfig.saveEx();
-
-			log.info("✅ Token refreshed and saved. Valid until: " + newTokenExpiry);
-			return token;
-		}
-
-		// Login to obtain a new token
-		log.info("🔑 Logging in to obtain new token...");
-		AuthRequest authRequest = new AuthRequest(serverLogin.getUserName(), serverLogin.getPassword(),
-				serverLogin.getSS_Client_ID(), serverLogin.getSS_Role_ID(), serverLogin.getSS_Org_ID(),
-				serverLogin.getAD_Language());
-
-		AuthResponse authResponse = authService.authenticate(authRequest);
-		token = authResponse.getToken();
-		refreshToken = authResponse.getRefresh_token();
-		int userID = authResponse.getUserId();
-
-		Timestamp newTokenExpiry = new Timestamp(now.getTime() + 60 * 60 * 1000); // 1 hour
-		Timestamp newRefreshExpiry = new Timestamp(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
-
-		syncConfig.setUserID(userID);
-		syncConfig.setToken(token);
-		syncConfig.setRefreshToken(refreshToken);
-		syncConfig.setTokenExpiry(newTokenExpiry);
-		syncConfig.setRefreshTokenExpiry(newRefreshExpiry);
-		syncConfig.saveEx();
-
-		log.info("✅ New token obtained and saved. Valid until: " + newTokenExpiry);
-		return token;
 	}
 
 	// Helper to merge where clauses
@@ -261,11 +189,11 @@ public class ReSyncAllTable extends SvrProcess {
 					log.info("Create sync successful for " + tableName + ". Response: " + response);
 					SyncLogger.logSyncResponse(response, synTable, getCtx(), get_TrxName());
 				} catch (Exception ex) {
-					logSummary(synTable, "Create sync failed for table " + tableName);
+					SyncUtils.logSummary(synTable, "Create sync failed for table " + tableName);
 					log.log(Level.SEVERE, "Create sync failed for table " + tableName, ex);
 				}
 			} else {
-				logSummary(synTable, "No New Record Found for table " + tableName);
+				SyncUtils.logSummary(synTable, "No New Record Found for table " + tableName);
 			}
 		}
 
@@ -311,11 +239,11 @@ public class ReSyncAllTable extends SvrProcess {
 					log.info("Update sync successful for " + tableName + ". Response: " + response);
 					SyncLogger.logSyncResponse(response, synTable, getCtx(), get_TrxName());
 				} catch (Exception ex) {
-					logSummary(synTable, "Update sync failed for table " + tableName);
+					SyncUtils.logSummary(synTable, "Update sync failed for table " + tableName);
 					log.log(Level.SEVERE, "Update sync failed for table " + tableName, ex);
 				}
 			} else {
-				logSummary(synTable, "No Update Record Found for table " + tableName);
+				SyncUtils.logSummary(synTable, "No Update Record Found for table " + tableName);
 			}
 		}
 
@@ -327,15 +255,4 @@ public class ReSyncAllTable extends SvrProcess {
 			log.info("Updated syncDate for table: " + tableName);
 		}
 	}
-
-	private void logSummary(MSSSyncTable synTable, String msg) {
-		MSSSyncLogSummary summary = new MSSSyncLogSummary(getCtx(), 0, get_TrxName());
-		summary.setSS_SyncTable_ID(synTable.getSS_SyncTable_ID());
-		summary.setStatus(msg);
-		summary.setSuccessCount(0);
-		summary.setFailedCount(0);
-		summary.setsyncDate(new Timestamp(System.currentTimeMillis()));
-		summary.saveEx();
-	}
-
 }

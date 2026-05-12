@@ -178,7 +178,9 @@ public class AuthServiceImpl implements AuthService {
 				createToken(responseNode, builder, setLoginParameters);
 			} catch (IllegalArgumentException | JWTCreationException e) {
 				e.printStackTrace();
-				return Response.status(Status.BAD_REQUEST).build();
+				return Response.status(Status.BAD_REQUEST)
+						.entity(new ErrorBuilder().status(Status.BAD_REQUEST).title("error").append(e.getLocalizedMessage()).build().toString())
+						.build();
 			}
 			return Response.ok(responseNode.toString()).build();
 		}
@@ -251,7 +253,9 @@ public class AuthServiceImpl implements AuthService {
 			return Response.ok(json.toString()).build();
 		} catch (IllegalArgumentException e) {
 			e.printStackTrace();
-			return Response.status(Status.BAD_REQUEST).build();
+			return Response.status(Status.BAD_REQUEST)
+					.entity(new ErrorBuilder().status(Status.BAD_REQUEST).title("error").append(e.getLocalizedMessage()).build().toString())
+					.build();
 		}
 	}
 
@@ -293,7 +297,9 @@ public class AuthServiceImpl implements AuthService {
 			return Response.ok(json.toString()).build();
 		} catch (IllegalArgumentException e) {
 			e.printStackTrace();
-			return Response.status(Status.BAD_REQUEST).build();
+			return Response.status(Status.BAD_REQUEST)
+					.entity(new ErrorBuilder().status(Status.BAD_REQUEST).title("error").append(e.getLocalizedMessage()).build().toString())
+					.build();
 		}
 	}
 
@@ -341,7 +347,9 @@ public class AuthServiceImpl implements AuthService {
 			return Response.ok(json.toString()).build();
 		} catch (IllegalArgumentException e) {
 			e.printStackTrace();
-			return Response.status(Status.BAD_REQUEST).build();
+			return Response.status(Status.BAD_REQUEST)
+					.entity(new ErrorBuilder().status(Status.BAD_REQUEST).title("error").append(e.getLocalizedMessage()).build().toString())
+					.build();
 		}
 	}
 
@@ -353,7 +361,9 @@ public class AuthServiceImpl implements AuthService {
 		try {
 			MClient client = MClient.get(Env.getCtx(), clientId);
 			if (client == null || client.get_ID() <= 0) {
-				return Response.status(Status.BAD_REQUEST).build();
+				return Response.status(Status.BAD_REQUEST)
+						.entity(new ErrorBuilder().status(Status.BAD_REQUEST).title("error no client").build().toString())
+						.build();
 			}
 			
 			JsonObject node = new JsonObject();
@@ -361,7 +371,9 @@ public class AuthServiceImpl implements AuthService {
 			return Response.ok(node.toString()).build();
 		} catch (IllegalArgumentException e) {
 			e.printStackTrace();
-			return Response.status(Status.BAD_REQUEST).build();
+			return Response.status(Status.BAD_REQUEST)
+					.entity(new ErrorBuilder().status(Status.BAD_REQUEST).title("error").append(e.getLocalizedMessage()).build().toString())
+					.build();
 		}
 	}
 
@@ -476,7 +488,9 @@ public class AuthServiceImpl implements AuthService {
 			createToken(responseNode, builder, true);
 		} catch (IllegalArgumentException | JWTCreationException e) {
 			e.printStackTrace();
-			return Response.status(Status.BAD_REQUEST).build();
+			return Response.status(Status.BAD_REQUEST)
+					.entity(new ErrorBuilder().status(Status.BAD_REQUEST).title("error").append(e.getLocalizedMessage()).build().toString())
+					.build();
 		}
 		return Response.ok(responseNode.toString()).build();
 	}
@@ -756,7 +770,9 @@ public class AuthServiceImpl implements AuthService {
 				key.addProperty("alg", Algorithm.HMAC512(TokenUtils.getTokenSecret()).getName());
 			} catch (IllegalArgumentException e) {
 				e.printStackTrace();
-				return Response.status(Status.BAD_REQUEST).build();
+				return Response.status(Status.BAD_REQUEST)
+						.entity(new ErrorBuilder().status(Status.BAD_REQUEST).title("error").append(e.getLocalizedMessage()).build().toString())
+						.build();
 			}
 			key.addProperty("k", DatatypeConverter.printBase64Binary(TokenUtils.getTokenSecret().getBytes()));
 			key.addProperty("kid", TokenUtils.getTokenKeyId());
@@ -897,7 +913,9 @@ public class AuthServiceImpl implements AuthService {
 			responseNode.addProperty("refresh_token", generateRefreshToken(token, refreshToken, null));
 		} catch (IllegalArgumentException | JWTCreationException e) {
 			e.printStackTrace();
-			return Response.status(Status.BAD_REQUEST).build();
+			return Response.status(Status.BAD_REQUEST)
+					.entity(new ErrorBuilder().status(Status.BAD_REQUEST).title("error").append(e.getLocalizedMessage()).build().toString())
+					.build();
 		}
 		return Response.ok(responseNode.toString()).build();
 	}
