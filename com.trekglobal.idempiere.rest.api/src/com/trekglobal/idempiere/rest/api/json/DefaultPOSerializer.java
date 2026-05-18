@@ -105,7 +105,7 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 				continue;
 			int columnId = view != null ? viewColumns[i].getAD_Column_ID() : poInfo.getAD_Column_ID(columnName); 
 			MColumn column = MColumn.get(Env.getCtx(), columnId);
-			if (column.isSecure() || column.isEncrypted())
+			if (column.isSecure() || column.isEncrypted() || column.isVirtualColumn())// TODO have to add the config so data can be send with and witout virtual column
 				continue;
 			if (!RestUtils.hasRoleColumnAccess(po.get_Table_ID(), column.getAD_Column_ID(), true))
 				continue;
