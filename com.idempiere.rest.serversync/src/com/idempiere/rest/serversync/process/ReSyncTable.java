@@ -51,8 +51,8 @@ public class ReSyncTable extends SvrProcess {
 			IdempiereConfig config = new IdempiereConfig(serverConfig.getHostAddress(), serverConfig.getHostPort());
 			IdempiereAuthService authService = new IdempiereAuthService(config);
 
+			syncTable.clearLog();
 			String token = SyncUtils.refreshOrLoginToken(syncConfig, serverLogin, authService, syncTable);
-
 			try {
 				syncRecords(syncTable, token, config, serverLogin, true);
 			} catch (Exception e) {

@@ -105,7 +105,9 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 				continue;
 			int columnId = view != null ? viewColumns[i].getAD_Column_ID() : poInfo.getAD_Column_ID(columnName); 
 			MColumn column = MColumn.get(Env.getCtx(), columnId);
-			if (column.isSecure() || column.isEncrypted() || column.isVirtualColumn())// TODO have to add the config so data can be send with and witout virtual column
+			if(column.isVirtualColumn())// TODO have to add the config so data can be send with and witout virtual column
+				continue;
+			if (column.isSecure() || column.isEncrypted())
 				continue;
 			if (!RestUtils.hasRoleColumnAccess(po.get_Table_ID(), column.getAD_Column_ID(), true))
 				continue;
@@ -189,11 +191,14 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 		List<String> mandatoryColumns = new ArrayList<>();
 		//loops through columns from view or PO definition
 		MRestViewColumn[] viewColumns = view != null ? view.getColumns() : null;
+		String keycolumn = table.get_KeyColumns()[0];
 		int count = view != null ? viewColumns.length : poInfo.getColumnCount(); 
 		for(int i = 0; i < count; i++) {
 			MRestViewColumn viewColumn = viewColumns != null ? viewColumns[i] : null;
 			String columnName = viewColumn != null ? MColumn.getColumnName(Env.getCtx(), viewColumn.getAD_Column_ID()) : poInfo.getColumnName(i);
 			MColumn column = table.getColumn(columnName);
+			if(column.isVirtualColumn() || column.getColumnName().equals(keycolumn))
+				continue;
 			String propertyName = null;
 			if (viewColumns != null) {
 				propertyName = viewColumns[i].getName();
@@ -301,10 +306,14 @@ public class DefaultPOSerializer implements IPOSerializer, IPOSerializerFactory 
 		List<String> mandatoryColumns = new ArrayList<>();
 		//loops through columns from view or PO definition
 		MRestViewColumn[] viewColumns = view != null ? view.getColumns() : null;
+		String keycolumn = table.get_KeyColumns()[0];
 		int count = view != null ? viewColumns.length : poInfo.getColumnCount();
 		for(int i = 0; i < count; i++) {
 			String columnName = viewColumns != null ? MColumn.getColumnName(Env.getCtx(), viewColumns[i].getAD_Column_ID()) : poInfo.getColumnName(i);
 			MColumn column = table.getColumn(columnName);
+			if(column.isVirtualColumn() || column.getColumnName().equals(keycolumn)) {
+				continue;
+			}
 			String propertyName = null;
 			if (viewColumns != null) {
 				propertyName = viewColumns[i].getName();

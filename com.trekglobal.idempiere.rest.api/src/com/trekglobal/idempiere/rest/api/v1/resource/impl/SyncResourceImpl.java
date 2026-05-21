@@ -13,6 +13,7 @@ import org.adempiere.exceptions.AdempiereException;
 import org.adempiere.exceptions.CrossTenantException;
 import org.compiere.model.MTable;
 import org.compiere.model.PO;
+import org.compiere.model.POInfo;
 import org.compiere.util.DB;
 import org.compiere.util.Trx;
 
@@ -21,7 +22,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import com.trekglobal.idempiere.rest.api.json.IPOSerializer;
 import com.trekglobal.idempiere.rest.api.json.RestUtils;
-import com.trekglobal.idempiere.rest.api.json.TypeConverterUtils;
 import com.trekglobal.idempiere.rest.api.v1.resource.SyncResource;
 
 /**
@@ -125,7 +125,7 @@ public class SyncResourceImpl implements SyncResource {
 			IPOSerializer serializer = IPOSerializer.getPOSerializer(tableName, MTable.getClass(tableName));
 
 			// Try to find existing record
-			po = findExistingRecord(table, recordJson);
+			po = findExistingRecord(table, recordJson, tableName);
 			boolean isNew = (po == null);
 
 			if (isNew) {
@@ -201,22 +201,22 @@ public class SyncResourceImpl implements SyncResource {
 	 * @param recordJson Input JSON record
 	 * @return Existing PO if found, otherwise null
 	 */
-	private PO findExistingRecord(MTable table, JsonObject recordJson) {
+	private PO findExistingRecord(MTable table, JsonObject recordJson, String tableName) {
 		try {
-			String[] keyColumns = table.getKeyColumns();
-			if (keyColumns != null && keyColumns.length > 0 && recordJson.has(keyColumns[0])) {
-				int poID = (int) TypeConverterUtils.fromJsonValue(table.getColumn(keyColumns[0]),
-						recordJson.get(keyColumns[0]), null);
-				if (poID > 0) {
-					PO existingPO = table.getPO(poID, null);
-					if (existingPO != null && existingPO.get_ID() > 0) {
-						log.fine(() -> "Found existing PO by ID: " + poID);
-						return existingPO;
-					}
-				}
-			}
+//			String[] keyColumns = table.getKeyColumns();
+//			if (keyColumns != null && keyColumns.length > 0 && recordJson.has(keyColumns[0])) {
+//				int poID = (int) TypeConverterUtils.fromJsonValue(table.getColumn(keyColumns[0]),
+//						recordJson.get(keyColumns[0]), null);
+//				if (poID > 0) {
+//					PO existingPO = table.getPO(poID, null);
+//					if (existingPO != null && existingPO.get_ID() > 0) {
+//						log.fine(() -> "Found existing PO by ID: " + poID);
+//						return existingPO;
+//					}
+//				}
+//			}
 
-			String uuidColumn = table.getUUIDColumnName();
+			String uuidColumn = PO.getUUIDColumnName(tableName);
 			if (uuidColumn != null && recordJson.has(uuidColumn)) {
 				String uuidValue = recordJson.get(uuidColumn).getAsString();
 				PO existingPO = table.getPO(uuidColumn + "=?", new Object[] { uuidValue }, null);
@@ -237,9 +237,10 @@ public class SyncResourceImpl implements SyncResource {
 		po.set_TrxName(trx.getTrxName());
 
 		// Build SQL dynamically
+		POInfo info = POInfo.getPOInfo(po.getCtx(), po.get_Table_ID(), po.get_TrxName());
 		StringBuilder sql = new StringBuilder();
 		List<Object> params = new ArrayList<>();
-		int columnCount = po.get_ColumnCount();
+		int columnCount = info.getColumnCount();
 
 		if (isNew) {
 			// INSERT
@@ -247,7 +248,11 @@ public class SyncResourceImpl implements SyncResource {
 			StringBuilder placeholders = new StringBuilder();
 
 			for (int i = 0; i < columnCount; i++) {
-				String colName = po.get_ColumnName(i);
+				
+				if(info.isVirtualColumn(i) || info.isVirtualUIColumn(i))
+					continue;
+				
+				String colName = info.getColumnName(i);
 				Object value = po.get_Value(i);
 
 				if (i > 0) {
@@ -265,11 +270,15 @@ public class SyncResourceImpl implements SyncResource {
 		} else {
 			// UPDATE
 			sql.append("UPDATE ").append(po.get_TableName()).append(" SET ");
-			Object idValue = po.get_ID();
+			Object idValue = po.get_UUID();
 
 			boolean first = true;
 			for (int i = 0; i < columnCount; i++) {
-				String colName = po.get_ColumnName(i);
+				
+				if(info.isVirtualColumn(i) || info.isVirtualUIColumn(i))
+					continue;
+				
+				String colName = info.getColumnName(i);
 				if (colName.equalsIgnoreCase(po.get_TableName() + "_ID"))
 					continue; // skip PK
 				Object value = po.get_Value(i);
@@ -281,13 +290,13 @@ public class SyncResourceImpl implements SyncResource {
 				first = false;
 			}
 
-			sql.append(" WHERE ").append(po.get_TableName()).append("_ID = ?");
+			sql.append(" WHERE ").append(PO.getUUIDColumnName(po.get_TableName())).append(" = ?");
 			params.add(idValue);
 		}
 
 		// Execute SQL
-		System.out.println(sql);
-		System.out.println(params);
+//		System.out.println(sql);
+//		System.out.println(params);
 		try {
 			int affectedRows = DB.executeUpdateEx(sql.toString(), params.toArray(), null);
 			if (affectedRows == 0) {

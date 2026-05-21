@@ -61,6 +61,7 @@ public class ReSyncAllTable extends SvrProcess {
 			List<MSSSyncTable> tables = syncConfig.getsyncTable();
 			for (MSSSyncTable table : tables) {
 				try {
+					table.clearLog();
 					syncRecords(table, token, config, serverLogin, true);
 				} catch (Exception e) {
 					log.log(Level.SEVERE, "Error syncing table: " + table.getAD_Table().getTableName(), e);

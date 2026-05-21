@@ -5,6 +5,7 @@ package com.idempiere.rest.serversync.dto;
  */
 public class AuthResponse {
     private int userId;
+    private int warehouseId;
     private String language;
     private int menuTreeId;
     private String token;
@@ -26,4 +27,12 @@ public class AuthResponse {
 
     public String getRefresh_token() { return refresh_token; }
     public void setRefresh_token(String refresh_token) { this.refresh_token = refresh_token; }
+
+	public int getWarehouseId() {
+		return warehouseId;
+	}
+
+	public void setWarehouseId(int warehouseId) {
+		this.warehouseId = warehouseId;
+	}
 }
